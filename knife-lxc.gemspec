@@ -23,7 +23,7 @@ Gem::Specification.new do |s|
   # s.add_development_dependency "rspec"
   # s.add_runtime_dependency "rest-client"
 
-  s.add_dependency 'chef',    '~> 0.10.0'
+  s.add_dependency 'chef',    '~> 11'
   s.add_dependency 'toft'
   s.add_dependency 'cucumber-chef'
 end
