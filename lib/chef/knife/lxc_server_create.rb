@@ -1,12 +1,12 @@
 require 'chef/knife'
 require 'toft'
-require 'cucumber/chef/handy'
+#require 'cucumber/chef/handy'
 
 module KnifeLxc
 
   class LxcServerCreate < Chef::Knife
     include Toft
-    include Cucumber::Chef::Handy
+    #include Cucumber::Chef::Handy
 
     banner "knife lxc server create -N NAME (options)"
 
