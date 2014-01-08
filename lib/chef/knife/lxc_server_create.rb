@@ -1,13 +1,17 @@
 require 'chef/knife'
-require 'toft'
-#require 'cucumber/chef/handy'
+require 'toft/node_controller'
 
 module KnifeLxc
 
   class LxcServerCreate < Chef::Knife
-    include Toft
-    #include Cucumber::Chef::Handy
-
+    #include Toft
+    
+    deps do
+      require 'chef/node'
+      require 'chef/knife/bootstrap'
+      Chef::Knife::Bootstrap.load_deps
+    end
+    
     banner "knife lxc server create -N NAME (options)"
 
     option :node_name,
@@ -38,10 +42,13 @@ module KnifeLxc
     # This method will be executed when you run this knife command.
     def run
       puts "Creating lxc container '#{config[:node_name]}' with ip '#{config[:node_ip]}' from template '#{config[:distro]}'"
-      node = create_node config[:node_name], {:ip => config[:node_ip], :type => config[:distro]}
+      node = Toft::NodeController.instance.create_node config[:node_name], {:ip => config[:node_ip], :type => config[:distro]}
       start_node node
-      puts "Run chef client with run list: #{config[:run_list].join(' ')}"
-      run_chef node, config[:run_list], config[:environment]
+      # HACK: is debian-specific
+      run_ssh node, 'apt-get install -y wget ca-certificates'
+      bootstrap_for_node(node).run
+#      puts "Run chef client with run list: #{config[:run_list].join(' ')}"
+#      run_chef node, config[:run_list], config[:environment]
       puts "Node created! Details: ip => #{node.ip}, name => #{node.hostname} "
     end
 
@@ -59,6 +66,22 @@ module KnifeLxc
       puts " OK!"
     end
 
+    # from knife-xenserver
+    def bootstrap_for_node(node)
+      bootstrap = Chef::Knife::Bootstrap.new
+      bootstrap.name_args = [node.ip]
+      bootstrap.config[:run_list] = config[:run_list]
+      bootstrap.config[:first_boot_attributes] = config[:first_boot_attributes]
+      bootstrap.config[:ssh_user] = 'root'
+      bootstrap.config[:ssh_password] = 'root'
+      bootstrap.config[:chef_node_name] = config[:chef_node_name] || node.hostname
+      # bootstrap will run as root...sudo (by default) also messes up Ohai on CentOS boxes
+      bootstrap.config[:use_sudo] = false
+      bootstrap.config[:distro] = 'chef-full'
+      bootstrap.config[:host_key_verify] = config[:host_key_verify]
+      bootstrap
+    end
+
     def run_chef(node, run_list, environment)
       set_run_list node.hostname, run_list
       env_string = environment.nil? ? "" : "-E #{environment}"
@@ -70,7 +93,13 @@ module KnifeLxc
       system "ssh #{node.ip} '#{cmd}'"
     end
 
-
+    def set_run_list(hostname, entries)
+      cnode = Chef::Node.load(hostname)
+      cnode.run_list.run_list_ites.clear
+      entries.each { |e| cnode.run_list << e }
+      cnode.save
+    end
+    
     def tcp_test_ssh(hostname)
       tcp_socket = TCPSocket.new(hostname, 22)
       readable = IO.select([tcp_socket], nil, nil, 5)
