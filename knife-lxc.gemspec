@@ -25,5 +25,6 @@ Gem::Specification.new do |s|
 
   s.add_dependency 'chef',    '~> 11'
   s.add_dependency 'toft'
-  s.add_dependency 'cucumber-chef'
+
+  s.add_development_dependency 'cucumber-chef'
 end
