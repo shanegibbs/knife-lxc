@@ -1,57 +1,67 @@
 require 'chef/knife'
+require 'toft'
+require 'yaml'
 
 module KnifeLxc
-  LXC_CONFIG_PATHS = ['/tmp', '/etc/lxc']
 
   class LxcServerList < Chef::Knife
 
-    banner "knife lxc server list"
+    banner 'knife lxc server list'
 
+    include Toft
 
     # This method will be executed when you run this knife command.
     def run
-      puts "Lxc containers list"
-      containers = `lxc-ls`.split.uniq
+      puts 'Lxc containers list'
+      containers = `sudo lxc-ls`.split.uniq
       server_list = [
         ui.color('Name', :bold),
-          ui.color('Ip', :bold)
+        ui.color('State', :bold),
+        ui.color('Ip', :bold)
       ]
+
+      ip_address_map = get_ip_address_map
+      state_map = get_state_map(containers)
+
       containers.each do |container|
         server_list << container
-        server_list << get_ip(container)
+        server_list << state_map[container]
+        server_list << ip_address_map[container]
       end
-      puts ui.list(server_list, :uneven_columns_across, 2)
+
+      puts ui.list(server_list, :uneven_columns_across, 3)
     end
 
     private
-    def get_ip(container)
-      config_path = find_config(container)
-      File.read(config_path).split("\n").each do |row|
-        if row =~ /ipv4/
-          ip = row.split("=").last
-          ip.strip!
-          return ip.split("/").first
-        end
-      end unless config_path.nil?
-      ""
+
+    def get_ip_address_map
+      map = Hash.new
+
+      leases_path = '/var/lib/misc/dnsmasq.leases'
+      File.read(leases_path).split("\n").each do |lease|
+        cols = lease.split(' ')
+        map[cols[3]] = cols[2]
+      end if File.exist?(leases_path)
+
+      map
     end
 
-    def find_config(container)
-      LXC_CONFIG_PATHS.each do |path|
-        config_path = "#{path}/#{container}"
-        if File.exists? config_path
-          return config_path
+    def get_state_map(containers)
+      map = Hash.new
+
+      containers.each do |container|
+        result = `sudo lxc-info --state --name #{container}`
+        # puts result
+
+        if match = result.match(/state: *(.+)/i)
+          state = match.captures.first.downcase
+          map[container] = state if state != 'stopped'
         end
 
-        # for toft
-        config_path = "#{path}/#{container}-conf"
-        if File.exists? config_path
-          return config_path
-        end
       end
-      nil
-    end
 
+      map
+    end
 
   end
 end
